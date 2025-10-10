@@ -1,0 +1,42 @@
+# --- Ambientes virtuais ---
+venv/
+.env/
+.venv/
+
+# --- Dados e datasets ---
+dataset/
+data/
+*.csv
+*.tsv
+*.xlsx
+*.json
+*.jpeg
+*.pdf
+*.txt
+
+# --- Compilados do Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Logs e cache ---
+*.log
+*.tmp
+*.cache/
+.cache/
+*.bak
+
+# --- Configurações de IDEs ---
+.vscode/
+.idea/
+*.swp
+
+# --- Arquivos temporários de SO ---
+.DS_Store
+Thumbs.db
+
+# --- Arquivos de build/distribuição ---
+build/
+dist/
+*.egg-info/
+.eggs/
