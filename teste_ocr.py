@@ -22,11 +22,19 @@ def find_matches_in_text(extracted_texts, search_values, threshold=0.7):
     matches = {}
     
     for field, search_value in search_values.items():
+        # Pula campos com valores null, None ou string vazia
+        if search_value is None or search_value == "" or search_value == "null":
+            continue
+            
         best_match = None
         best_similarity = 0
         best_confidence = 0
         
         search_value_normalized = normalize_text(str(search_value))
+        
+        # Se após normalizar o valor ficar vazio, também pula
+        if not search_value_normalized.strip():
+            continue
         
         for text_info in extracted_texts:
             text = text_info['text']
