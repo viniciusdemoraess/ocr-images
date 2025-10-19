@@ -1,12 +1,14 @@
 # Script OCR com PaddleOCR
 
-Este script utiliza PaddleOCR para extrair texto de documentos (PDFs e imagens) e compara com valores esperados definidos em arquivos JSON.
+Este script utiliza PaddleOCR para extrair texto de documentos (PDFs e imagens) e compara com valores esperados definidos em arquivos JSON. **Suporta análise por editais através de subpastas organizadas.**
 
 ## 📋 Funcionalidades
 
 - **Extração de texto**: Utiliza PaddleOCR para extrair texto de documentos
 - **Busca inteligente**: Compara texto extraído com valores esperados usando similaridade
-- **Relatórios detalhados**: Gera relatórios em TXT e JSON com resultados da análise
+- **Análise por editais**: Processa documentos organizados em subpastas (editais) com estatísticas consolidadas
+- **Relatórios detalhados**: Gera relatórios em TXT e JSON com resultados da análise por edital
+- **Compatibilidade**: Funciona com arquivos diretos em `input_docs/` ou organizados em subpastas
 - **Suporte múltiplos formatos**: PDF, JPEG, JPG, PNG
 - **Análise de confiança**: Calcula similaridade e confiança OCR para cada match
 
@@ -33,15 +35,36 @@ pip install paddlepaddle paddleocr
 
 ## 📁 Estrutura de Arquivos
 
-O script processa arquivos na pasta `input_docs/`. Para cada documento, deve existir um arquivo JSON correspondente com os valores a serem pesquisados.
+### Opção 1: Organização por Editais (Recomendado)
+
+Organize seus documentos em subpastas dentro de `input_docs/`, onde cada subpasta representa um edital:
+
+```
+input_docs/
+├── edital_001/
+│   ├── documento1.pdf          # Documento do edital 001
+│   ├── documento1.json         # Valores esperados para documento1
+│   ├── nota_fiscal.jpeg        # Outro documento do edital 001
+│   └── nota_fiscal.json        # Valores esperados para nota_fiscal
+├── edital_002/
+│   ├── recibo.pdf              # Documento do edital 002
+│   ├── recibo.json             # Valores esperados para recibo
+│   └── contrato.jpeg           # Outro documento do edital 002
+└── licitacao_2025/
+    ├── proposta.pdf
+    └── proposta.json
+```
+
+### Opção 2: Arquivos Diretos (Compatibilidade)
+
+Funciona como antes, com arquivos diretos em `input_docs/`:
 
 ```
 input_docs/
 ├── documento1.pdf          # Documento a ser processado
 ├── documento1.json         # Valores esperados para documento1
 ├── nota_fiscal.jpeg        # Imagem a ser processada
-├── nota_fiscal.json        # Valores esperados para nota_fiscal
-└── ...
+└── nota_fiscal.json        # Valores esperados para nota_fiscal
 ```
 
 ### Exemplo de arquivo JSON com valores esperados:
@@ -61,7 +84,8 @@ input_docs/
 ## 🔧 Como Executar
 
 1. **Preparar os arquivos**:
-   - Coloque seus documentos (PDF/imagens) na pasta `input_docs/`
+   - **Para análise por editais**: Crie subpastas em `input_docs/` para cada edital
+   - **Para análise simples**: Coloque arquivos diretamente em `input_docs/`
    - Crie arquivos JSON correspondentes com os valores a serem pesquisados
 
 2. **Executar o script**:
@@ -71,20 +95,52 @@ input_docs/
 
 3. **Verificar resultados**:
    - Relatório detalhado: `resultado_ocr_completo.txt`
+   - Resumo por edital: `resultados_json/resumo_por_edital.json`
    - JSONs individuais: pasta `resultados_json/`
 
 ## 📊 Resultados
 
 ### Arquivos gerados:
 
-- **`resultado_ocr_completo.txt`**: Relatório detalhado em texto
-- **`resultados_json/`**: Pasta com JSONs individuais para cada documento processado
+- **`resultado_ocr_completo.txt`**: Relatório detalhado organizado por edital
+- **`resultados_json/resumo_por_edital.json`**: Estatísticas consolidadas por edital
+- **`resultados_json/`**: JSONs individuais para cada documento processado
 
-### Estrutura do JSON de resultado:
+### Exemplo de resumo por edital (`resumo_por_edital.json`):
+
+```json
+{
+  "data_processamento": "19/10/2025 14:30:45",
+  "total_editais": 2,
+  "total_documentos": 5,
+  "estatisticas_por_edital": {
+    "edital_001": {
+      "nome_edital": "edital_001",
+      "total_documentos": 3,
+      "total_campos": 15,
+      "campos_encontrados": 12,
+      "taxa_sucesso_percentual": "80.0%",
+      "taxa_sucesso_decimal": 0.8
+    },
+    "edital_002": {
+      "nome_edital": "edital_002",
+      "total_documentos": 2,
+      "total_campos": 10,
+      "campos_encontrados": 9,
+      "taxa_sucesso_percentual": "90.0%",
+      "taxa_sucesso_decimal": 0.9
+    }
+  }
+}
+```
+
+### Estrutura do JSON individual:
 
 ```json
 {
   "arquivo_processado": "nota_fiscal.jpeg",
+  "edital": "edital_001",
+  "data_processamento": "19/10/2025 14:30:45",
   "resumo_matches": {
     "total_campos": 5,
     "campos_encontrados": 4,
@@ -102,6 +158,71 @@ input_docs/
 }
 ```
 
+## 🔍 Como Funciona
+
+1. **Detecção**: O script detecta automaticamente se há subpastas (editais) ou arquivos diretos
+2. **Processamento por Edital**: Se houver subpastas, processa cada uma como um edital separado
+3. **OCR**: Executa PaddleOCR em cada documento
+4. **Normalização**: Limpa e normaliza o texto extraído
+5. **Comparação**: Compara com valores esperados usando similaridade
+6. **Consolidação**: Calcula estatísticas por edital e geral
+7. **Relatórios**: Gera relatórios detalhados e resumos consolidados
+
+## 📈 Relatórios Console
+
+O script exibe no console um resumo por edital:
+
+```
+=== RELATÓRIO RESUMIDO POR EDITAL ===
+Total de editais: 2
+Total de documentos: 5
+
+🏛️ edital_001:
+  📄 Documentos: 3
+  ✅ Taxa de sucesso: 80.0%
+  🔍 Campos: 12/15
+
+🏛️ edital_002:
+  📄 Documentos: 2
+  ✅ Taxa de sucesso: 90.0%
+  🔍 Campos: 9/10
+```
+
+## 📝 Exemplos de Uso
+
+### Exemplo 1: Análise por Editais
+```
+input_docs/
+├── licitacao_obras_2025/
+│   ├── proposta_empresa_a.pdf
+│   ├── proposta_empresa_a.json
+│   ├── proposta_empresa_b.pdf
+│   └── proposta_empresa_b.json
+└── pregao_servicos_2025/
+    ├── orcamento_fornecedor_x.jpeg
+    ├── orcamento_fornecedor_x.json
+    ├── orcamento_fornecedor_y.pdf
+    └── orcamento_fornecedor_y.json
+```
+
+**proposta_empresa_a.json**:
+```json
+{
+  "cnpj_proponente": "11.222.333/0001-44",
+  "valor_proposta": "R$ 150.000,00",
+  "prazo_execucao": "90 dias"
+}
+```
+
+### Exemplo 2: Modo Compatibilidade
+```
+input_docs/
+├── nota_fiscal_123.pdf
+├── nota_fiscal_123.json
+├── recibo_pagamento.jpeg
+└── recibo_pagamento.json
+```
+
 ## ⚙️ Configurações
 
 ### Parâmetros ajustáveis no código:
@@ -117,50 +238,6 @@ ocr = PaddleOCR(use_angle_cls=True, lang='pt')
 
 # Para alterar o threshold de similaridade
 matches = find_matches_in_text(extracted_texts, json_data, threshold=0.8)
-```
-
-## 🔍 Como Funciona
-
-1. **Leitura**: O script lê todos os arquivos da pasta `input_docs/`
-2. **OCR**: Executa PaddleOCR em cada documento
-3. **Normalização**: Limpa e normaliza o texto extraído
-4. **Comparação**: Compara com valores esperados usando:
-   - Similaridade de sequência
-   - Busca por contenção de substring
-5. **Relatório**: Gera relatórios detalhados com resultados
-
-## 📝 Exemplos de Uso
-
-### Exemplo 1: Nota Fiscal
-```
-input_docs/
-├── nota_fiscal_123.pdf
-└── nota_fiscal_123.json
-```
-
-**nota_fiscal_123.json**:
-```json
-{
-  "numero_nota": "000123",
-  "cnpj_emissor": "11.222.333/0001-44",
-  "valor_total": "R$ 1.500,00"
-}
-```
-
-### Exemplo 2: Recibo
-```
-input_docs/
-├── recibo_pagamento.jpeg
-└── recibo_pagamento.json
-```
-
-**recibo_pagamento.json**:
-```json
-{
-  "beneficiario": "João Silva",
-  "valor": "500,00",
-  "data": "10/10/2024"
-}
 ```
 
 ## 🐛 Troubleshooting
@@ -181,6 +258,10 @@ input_docs/
    - Verifique se os valores no JSON estão corretos
    - Valores `null`, `""` são ignorados automaticamente
    - Ajuste threshold se necessário
+
+4. **Subpastas não reconhecidas**:
+   - Certifique-se que há pelo menos uma subpasta em `input_docs/`
+   - Evite misturar arquivos diretos com subpastas
 
 ## 📄 Requisitos do Sistema
 
