@@ -6,6 +6,19 @@ import re
 from difflib import SequenceMatcher
 from datetime import datetime
 
+# Importações para geração de PDF
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    PDF_AVAILABLE = True
+except ImportError:
+    PDF_AVAILABLE = False
+    print("⚠️ Bibliotecas de PDF não encontradas. Instale com: pip install reportlab")
+
 def similarity(a, b):
     """Calcula a similaridade entre duas strings"""
     return SequenceMatcher(None, a.lower(), b.lower()).ratio()
@@ -148,6 +161,262 @@ def calculate_edital_stats(results_by_edital):
         }
     
     return edital_stats
+
+def create_header_footer(canvas, doc):
+    """Cria cabeçalho e rodapé personalizados para o PDF"""
+    canvas.saveState()
+    
+    # Cabeçalho
+    canvas.setFont('Helvetica-Bold', 10)
+    canvas.setFillColor(colors.darkblue)
+    canvas.drawString(inch, A4[1] - 0.5*inch, "Relatório de Processamento OCR")
+    
+    # Rodapé
+    canvas.setFont('Helvetica', 8)
+    canvas.setFillColor(colors.grey)
+    canvas.drawString(inch, 0.5*inch, f"Gerado em: {datetime.now().strftime('%d/%m/%Y às %H:%M:%S')}")
+    canvas.drawRightString(A4[0] - inch, 0.5*inch, f"Página {doc.page}")
+    
+    canvas.restoreState()
+
+def generate_pdf_report(json_data, output_path):
+    """Gera relatório PDF completo baseado nos dados do JSON"""
+    if not PDF_AVAILABLE:
+        print("❌ Não foi possível gerar PDF - bibliotecas não instaladas")
+        return None
+    
+    # Configura estilos
+    styles = getSampleStyleSheet()
+    
+    # Estilos customizados
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Title'],
+        fontSize=24,
+        spaceAfter=30,
+        alignment=TA_CENTER,
+        textColor=colors.darkblue
+    )
+    
+    subtitle_style = ParagraphStyle(
+        'CustomSubtitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        spaceAfter=20,
+        alignment=TA_CENTER,
+        textColor=colors.darkgreen
+    )
+    
+    section_style = ParagraphStyle(
+        'SectionHeader',
+        parent=styles['Heading2'],
+        fontSize=14,
+        spaceAfter=12,
+        spaceBefore=20,
+        textColor=colors.darkblue,
+        borderWidth=1,
+        borderColor=colors.darkblue,
+        borderPadding=5
+    )
+    
+    normal_style = ParagraphStyle(
+        'CustomNormal',
+        parent=styles['Normal'],
+        fontSize=11,
+        spaceAfter=6,
+        alignment=TA_LEFT
+    )
+    
+    # Cria o documento PDF
+    doc = SimpleDocTemplate(
+        output_path,
+        pagesize=A4,
+        rightMargin=inch,
+        leftMargin=inch,
+        topMargin=1.2*inch,
+        bottomMargin=inch
+    )
+    
+    # Lista para armazenar os elementos do PDF
+    story = []
+    
+    # Título principal
+    title = Paragraph("Relatório de Processamento OCR", title_style)
+    story.append(title)
+    story.append(Spacer(1, 20))
+    
+    # Tabela de resumo geral
+    resumo_data = [
+        ['Métrica', 'Valor'],
+        ['Data de Processamento', json_data['data_processamento']],
+        ['Total de Editais', str(json_data['total_editais'])],
+        ['Total de Documentos', str(json_data['total_documentos'])],
+    ]
+    
+    resumo_table = Table(resumo_data, colWidths=[3*inch, 2*inch])
+    resumo_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    
+    story.append(resumo_table)
+    story.append(Spacer(1, 30))
+    
+    # Seção de análise por edital
+    section_header = Paragraph("Análise Detalhada por Edital", section_style)
+    story.append(section_header)
+    
+    # Cria tabela com estatísticas detalhadas
+    stats_data = [['Edital', 'Documentos', 'Campos Total', 'Campos Encontrados', 'Taxa de Sucesso']]
+    
+    total_documentos = 0
+    total_campos = 0
+    total_encontrados = 0
+    
+    for edital_name, stats in json_data['estatisticas_por_edital'].items():
+        stats_data.append([
+            stats['nome_edital'],
+            str(stats['total_documentos']),
+            str(stats['total_campos']),
+            str(stats['campos_encontrados']),
+            stats['taxa_sucesso_percentual']
+        ])
+        
+        total_documentos += stats['total_documentos']
+        total_campos += stats['total_campos']
+        total_encontrados += stats['campos_encontrados']
+    
+    # Linha de totais
+    taxa_geral = (total_encontrados / total_campos * 100) if total_campos > 0 else 0
+    stats_data.append([
+        'TOTAL GERAL',
+        str(total_documentos),
+        str(total_campos),
+        str(total_encontrados),
+        f'{taxa_geral:.1f}%'
+    ])
+    
+    # Ajuste de larguras: aumenta colunas de campos e taxa para melhorar legibilidade
+    stats_table = Table(stats_data, colWidths=[2.2*inch, 1.0*inch, 1.4*inch, 1.6*inch, 1.2*inch])
+    # Paleta de cores padronizada: header azul escuro, corpo branco, linha de total azul claro, grid cinza claro
+    header_bg = colors.HexColor('#1f4e79')  # azul escuro
+    body_bg = colors.whitesmoke
+    total_bg = colors.HexColor('#cfe2f3')  # azul claro
+    grid_color = colors.HexColor('#d9d9d9')
+
+    stats_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), header_bg),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -2), body_bg),
+        ('BACKGROUND', (0, -1), (-1, -1), total_bg),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.5, grid_color),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+    
+    story.append(stats_table)
+    story.append(Spacer(1, 20))
+    
+    # Análise individual por edital
+    for edital_name, stats in json_data['estatisticas_por_edital'].items():
+        story.append(PageBreak())
+        
+        # Título do edital
+        edital_title = Paragraph(f"Análise: {stats['nome_edital']}", subtitle_style)
+        story.append(edital_title)
+        story.append(Spacer(1, 15))
+        
+        # Informações detalhadas do edital
+        info_text = f"""
+        <b>Resumo do Edital:</b><br/>
+        • Nome: {stats['nome_edital']}<br/>
+        • Total de documentos processados: {stats['total_documentos']}<br/>
+        • Total de campos analisados: {stats['total_campos']}<br/>
+        • Campos encontrados com sucesso: {stats['campos_encontrados']}<br/>
+        • Taxa de sucesso: {stats['taxa_sucesso_percentual']}<br/><br/>
+        
+        <b>Interpretação dos Resultados:</b><br/>
+        """
+        
+        # Adiciona interpretação baseada na taxa de sucesso
+        taxa_decimal = stats['taxa_sucesso_decimal']
+        if taxa_decimal >= 0.9:
+            interpretacao = "Excelente! A taxa de sucesso indica um processamento muito eficiente dos documentos."
+        elif taxa_decimal >= 0.7:
+            interpretacao = "Bom! A maioria dos campos foi identificada corretamente, mas há espaço para melhorias."
+        elif taxa_decimal >= 0.5:
+            interpretacao = "Moderado. Cerca de metade dos campos foi identificada. Recomenda-se revisar a qualidade das imagens."
+        else:
+            interpretacao = "Baixo. A taxa de sucesso indica possíveis problemas na qualidade das imagens ou na configuração do OCR."
+        
+        info_text += f"• {interpretacao}<br/><br/>"
+        
+        # Recomendações
+        info_text += "<b>Recomendações:</b><br/>"
+        if taxa_decimal < 0.7:
+            info_text += "• Verificar a qualidade e resolução das imagens<br/>"
+            info_text += "• Considerar pré-processamento das imagens<br/>"
+            info_text += "• Revisar os padrões de busca utilizados<br/>"
+        else:
+            info_text += "• Manter o padrão atual de processamento<br/>"
+            info_text += "• Considerar otimizações pontuais nos campos não encontrados<br/>"
+        
+        info_paragraph = Paragraph(info_text, normal_style)
+        story.append(info_paragraph)
+        story.append(Spacer(1, 20))
+    
+    # Conclusões e recomendações gerais
+    story.append(PageBreak())
+    conclusion_title = Paragraph("Conclusões e Recomendações Gerais", subtitle_style)
+    story.append(conclusion_title)
+    
+    conclusion_text = f"""
+    <b>Análise Geral do Processamento:</b><br/><br/>
+    
+    O sistema de OCR processou um total de <b>{json_data['total_documentos']} documentos</b> 
+    distribuídos em <b>{json_data['total_editais']} editais</b> diferentes. 
+    
+    A taxa de sucesso geral do sistema foi de <b>{taxa_geral:.1f}%</b>, 
+    indicando um nível {'excelente' if taxa_geral >= 90 else 'bom' if taxa_geral >= 70 else 'moderado' if taxa_geral >= 50 else 'baixo'} 
+    de eficiência na extração de informações.<br/><br/>
+    
+    <b>Principais Observações:</b><br/>
+    • Total de campos analisados: {total_campos}<br/>
+    • Campos identificados com sucesso: {total_encontrados}<br/>
+    • Campos não identificados: {total_campos - total_encontrados}<br/><br/>
+    
+    <b>Recomendações para Melhorias:</b><br/>
+    • Implementar validação cruzada dos resultados<br/>
+    • Considerar treinamento específico do modelo OCR para documentos similares<br/>
+    • Estabelecer pipeline de pré-processamento de imagens<br/>
+    • Criar sistema de feedback para melhoria contínua<br/>
+    • Desenvolver métricas de qualidade por tipo de documento<br/><br/>
+    
+    <b>Próximos Passos:</b><br/>
+    • Analisar individualmente os documentos com menor taxa de sucesso<br/>
+    • Implementar melhorias baseadas nos padrões identificados<br/>
+    • Estabelecer processo de monitoramento contínuo da qualidade<br/>
+    """
+    
+    conclusion_paragraph = Paragraph(conclusion_text, normal_style)
+    story.append(conclusion_paragraph)
+    
+    # Constrói o PDF
+    doc.build(story, onFirstPage=create_header_footer, onLaterPages=create_header_footer)
+    
+    return output_path
 
 # Inicializa OCR
 ocr = PaddleOCR(use_angle_cls=True, lang='pt')
@@ -293,6 +562,27 @@ with open(edital_consolidado_path, 'w', encoding='utf-8') as json_file:
     json.dump(edital_consolidado, json_file, ensure_ascii=False, indent=2)
 
 print(f"📊 Resumo por edital salvo: {edital_consolidado_path}")
+
+# Gera o relatório PDF baseado no JSON consolidado
+if PDF_AVAILABLE:
+    try:
+        # Define o caminho do PDF
+        pdf_path = edital_consolidado_path.replace('.json', '_relatorio.pdf')
+        
+        # Gera o PDF
+        generate_pdf_report(edital_consolidado, pdf_path)
+        print(f"📄 Relatório PDF gerado: {pdf_path}")
+        
+        # Exibe informações sobre o arquivo gerado
+        if os.path.exists(pdf_path):
+            file_size = os.path.getsize(pdf_path)
+            print(f"📏 Tamanho do arquivo PDF: {file_size:,} bytes ({file_size/1024:.1f} KB)")
+        
+    except Exception as e:
+        print(f"⚠️ Erro ao gerar PDF: {e}")
+        print("💡 Certifique-se de que as dependências estão instaladas: pip install reportlab")
+else:
+    print("💡 Para gerar relatório PDF, instale as dependências: pip install reportlab")
 
 # Gera JSONs individuais por documento
 for result in all_results:
